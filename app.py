@@ -4,6 +4,7 @@ from tkinter import ttk
 
 from db import background_sync_loop, init_supabase, online_flag, offline_queue
 from ui.dashboard_page import DashboardPage
+from ui.add_page import AddPage
 
 
 class App(tk.Tk):
@@ -47,7 +48,7 @@ class App(tk.Tk):
 
         # Placeholders for other tabs (to be implemented later)
         self.btn_add = ttk.Button(self.sidebar, text="Add", style="SidebarButton.TButton",
-                                  command=self.show_dashboard)
+                          command=self.show_add)
         self.btn_add.pack(padx=10, pady=5, fill="x")
         self.btn_manage = ttk.Button(self.sidebar, text="Manage", style="SidebarButton.TButton",
                                      command=self.show_dashboard)
@@ -77,6 +78,9 @@ class App(tk.Tk):
         self.dashboard_page = DashboardPage(self.container, self.set_status)
         self.dashboard_page.grid(row=0, column=0, sticky="nsew")
 
+        self.add_page = AddPage(self.container, self.set_status)
+        self.add_page.grid(row=0, column=0, sticky="nsew")
+
         # Later: AddPage, ManagePage, UsePage, HistoryPage, AdjustPage instances
 
         self.show_dashboard()
@@ -95,7 +99,10 @@ class App(tk.Tk):
         else:
             self.status_var.set(f"Offline (Queued: {len(offline_queue)})")
         self.after(2000, self.update_status)
-
+    
+    def show_add(self):
+        self.add_page.tkraise()
+        self.set_status("Add / Receive components.")
 
 if __name__ == "__main__":
     threading.Thread(target=background_sync_loop, daemon=True).start()
