@@ -1,6 +1,4 @@
 @echo off
-echo Starting Smart Storage...
-
+cd /d %~dp0
 call venv\Scripts\activate.bat
-
 python app.py
