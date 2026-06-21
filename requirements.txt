@@ -1,7 +1,0 @@
-streamlit
-supabase
-python-dotenv
-pandas
-requests
-Pillow
-streamlit-option-menu
