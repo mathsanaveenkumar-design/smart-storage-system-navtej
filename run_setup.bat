@@ -9,5 +9,5 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 echo.
-echo Setup complete. Copy config.example.env to .env and fill SUPABASE_URL, SUPABASE_KEY, EMPLOYEES.
+echo Setup complete. Create .env with SUPABASE_URL, SUPABASE_KEY, EMPLOYEES.
 pause
