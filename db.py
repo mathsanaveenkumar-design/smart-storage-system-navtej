@@ -117,3 +117,151 @@ def get_recent_movements(limit: int = 10) -> List[Dict[str, Any]]:
         return res.data
     except Exception:
         return []
+
+# ---------- Locations & components for ADD page ----------
+
+def get_all_locations() -> list[dict]:
+    if supabase is None:
+        return []
+    try:
+        res = supabase.table("locations").select("*").order("display_name").execute()
+        return res.data
+    except Exception:
+        return []
+
+
+def ensure_location(rack_name: str, shelf_name: str, position: str | None = None) -> int | None:
+    """
+    Ensure a location exists for given rack/shelf/position, return its id.
+    We encode location_key as RACK_SHELF_POSITION or RACK_SHELF if no position.
+    """
+    if supabase is None:
+        return None
+
+    rack_key = normalize_key(rack_name)
+    shelf_key = normalize_key(shelf_name)
+    if position:
+        pos_key = normalize_key(position)
+        loc_key = f"{rack_key}_{shelf_key}_{pos_key}"
+        display = f"{pretty_name(rack_key)} / {pretty_name(shelf_key)} / {pretty_name(pos_key)}"
+    else:
+        loc_key = f"{rack_key}_{shelf_key}"
+        display = f"{pretty_name(rack_key)} / {pretty_name(shelf_key)}"
+
+    try:
+        res = supabase.table("locations").select("*").eq("location_key", loc_key).execute()
+        if res.data:
+            return res.data[0]["id"]
+        data = {
+            "location_key": loc_key,
+            "display_name": display,
+            "created_at": now_ts()
+        }
+        queue_or_run("locations", data, "insert")
+        # read back
+        res2 = supabase.table("locations").select("id").eq("location_key", loc_key).single().execute()
+        return res2.data["id"]
+    except Exception:
+        return None
+
+
+def upsert_component_and_receive_stock(
+    vendor: str,
+    comp_name: str,
+    part_number: str | None,
+    qty: int,
+    purpose: str,
+    remarks: str,
+    location_id: int,
+    user_name: str = "SYSTEM"
+) -> None:
+    """
+    Upsert component in components, upsert stocks at location, add stock_movements row (ADD).
+    """
+    if supabase is None:
+        # offline: we just queue a generic components insert; no guarantees but keeps queueing
+        ts = now_ts()
+        cname_raw = normalize_key(comp_name)
+        part_raw = normalize_key(part_number) if part_number else None
+        comp_key = cname_raw + "_" + (part_raw if part_raw else "NO_PART")
+        data_comp = {
+            "component_key": comp_key,
+            "component_name_raw": cname_raw,
+            "part_number_raw": part_raw,
+            "vendor_name": vendor,
+            "purpose_of_purchase": purpose,
+            "remarks": remarks,
+            "created_at": ts,
+            "updated_at": ts
+        }
+        queue_or_run("components", data_comp, "insert")
+        return
+
+    ts = now_ts()
+    cname_raw = normalize_key(comp_name)
+    part_raw = normalize_key(part_number) if part_number else None
+    comp_key = cname_raw + "_" + (part_raw if part_raw else "NO_PART")
+
+    comp_id = None
+    try:
+        res = supabase.table("components").select("*").eq("component_key", comp_key).execute()
+        if res.data:
+            comp = res.data[0]
+            comp_id = comp["id"]
+            update_data = {
+                "vendor_name": vendor,
+                "purpose_of_purchase": purpose,
+                "remarks": remarks,
+                "updated_at": ts,
+            }
+            queue_or_run("components", update_data, "update", comp_id)
+        else:
+            insert_data = {
+                "component_key": comp_key,
+                "component_name_raw": cname_raw,
+                "part_number_raw": part_raw,
+                "vendor_name": vendor,
+                "purpose_of_purchase": purpose,
+                "remarks": remarks,
+                "created_at": ts,
+                "updated_at": ts,
+            }
+            queue_or_run("components", insert_data, "insert")
+            res2 = supabase.table("components").select("id").eq("component_key", comp_key).single().execute()
+            comp_id = res2.data["id"]
+    except Exception:
+        return
+
+    if comp_id is None:
+        return
+
+    # upsert into stocks
+    try:
+        res = supabase.table("stocks").select("*").eq("component_id", comp_id).eq("location_id", location_id).execute()
+        if res.data:
+            row = res.data[0]
+            new_qty = (row["quantity"] or 0) + qty
+            queue_or_run("stocks", {"quantity": new_qty, "updated_at": ts}, "update", row["id"])
+        else:
+            queue_or_run(
+                "stocks",
+                {"component_id": comp_id, "location_id": location_id, "quantity": qty, "updated_at": ts},
+                "insert",
+            )
+    except Exception:
+        pass
+
+    # add stock_movements
+    mv_data = {
+        "component_id": comp_id,
+        "from_location_id": None,
+        "to_location_id": location_id,
+        "quantity": qty,
+        "movement_type": "ADD",
+        "user_name": user_name,
+        "purpose": purpose,
+        "remarks": remarks,
+        "movement_date": datetime.date.today().isoformat(),
+        "created_at": ts,
+    }
+    queue_or_run("stock_movements", mv_data, "insert")
