@@ -1,4 +1,0 @@
-supabase
-python-dotenv
-Pillow
-requests
