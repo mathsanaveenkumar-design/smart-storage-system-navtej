@@ -32,4 +32,4 @@ Follow these steps to install and run the program on your computer:
 
 ## Managing Employees
 
-If you need to add, remove, or edit employees within the application, please refer to the **encoded PDF** attached with this project. It contains the detailed, password-protected instructions for employee management.
+If you need to add, remove, or edit employees within the application, please refer to the **encoded TXT file** attached with this project. It contains the detailed, password-protected instructions for employee management.
